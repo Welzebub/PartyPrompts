@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partypost – Bildschirm</title>
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; }
+  body { font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; color:#fff6e0; background:#2b1055;
+    transition: background-color 1.2s ease; }
+  #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:8vmin; }
+  #text { margin:0; max-width:90vw; text-align:center; font-weight:800; line-height:1.15;
+    overflow-wrap:anywhere; opacity:0; transition: opacity .9s ease; }
+  #text.on { opacity:1; }
+  #hint { position:absolute; left:0; right:0; bottom:2.5vmin; text-align:center; font-size:2.4vmin; opacity:.75; }
+  @media (prefers-reduced-motion: reduce) { body, #text { transition:none; } }
+</style>
+</head>
+<body>
+<div id="stage"><p id="text"></p></div>
+<div id="hint"></div>
+<script>
+  const COLORS = ['#2b1055','#7a1f5c','#0b5563','#a33b20','#1f4d2b','#3a2a8c'];
+  const textEl = document.getElementById('text'), hint = document.getElementById('hint');
+  hint.textContent = 'Mitmachen: ' + location.host;
+
+  let all = new Map(), seen = new Set(), fresh = [], bag = [], last = null, first = true;
+
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  async function poll() {
+    try {
+      const list = await (await fetch('/api/posts', { cache:'no-store' })).json();
+      all = new Map(list.map(p => [p.id, p]));
+      for (const p of list) if (!seen.has(p.id)) { seen.add(p.id); if (!first) fresh.push(p.id); else bag.push(p.id); }
+      first = false;
+    } catch {}
+  }
+
+  function next() {
+    fresh = fresh.filter(id => all.has(id));
+    bag = bag.filter(id => all.has(id));
+    if (fresh.length) return all.get(fresh.shift());
+    if (!bag.length) {
+      bag = shuffle([...all.keys()]);
+      if (bag.length > 1 && bag[bag.length - 1] === last) bag.unshift(bag.pop());
+    }
+    return bag.length ? all.get(bag.pop()) : null;
+  }
+
+  function sizeFor(n) { return n <= 40 ? '10vmin' : n <= 90 ? '7.5vmin' : '6vmin'; }
+
+  async function loop() {
+    await poll();
+    for (;;) {
+      const p = next();
+      textEl.classList.remove('on');
+      await new Promise(r => setTimeout(r, 900));
+      if (!p) {
+        textEl.textContent = 'Noch nichts da. Scannt den QR-Code und schreibt los!';
+        textEl.style.fontSize = '6vmin';
+        textEl.classList.add('on');
+        await new Promise(r => setTimeout(r, 4000));
+        await poll();
+        continue;
+      }
+      last = p.id;
+      document.body.style.backgroundColor = COLORS[parseInt(p.id.slice(0, 4), 16) % COLORS.length];
+      textEl.textContent = p.text;
+      textEl.style.fontSize = sizeFor([...p.text].length);
+      textEl.classList.add('on');
+      await new Promise(r => setTimeout(r, Math.min(14000, 6000 + p.text.length * 70)));
+    }
+  }
+  setInterval(poll, 4000);
+  loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partypost</title>
+<style>
+  :root { --bg:#2b1055; --fg:#fff6e0; --accent:#ffb703; --muted:#c9b8ee; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--fg);
+    font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; display:flex; justify-content:center; }
+  main { width:100%; max-width:34rem; padding:2rem 1.25rem; }
+  h1 { font-size:2.4rem; margin:0 0 .5rem; font-weight:800; letter-spacing:-.02em; }
+  p { color:var(--muted); line-height:1.5; margin:0 0 1.5rem; }
+  textarea { width:100%; height:9rem; padding:1rem; font:inherit; font-size:1.15rem; color:#1d0a3d;
+    background:var(--fg); border:3px solid transparent; border-radius:14px; resize:none; }
+  textarea:focus { outline:none; border-color:var(--accent); }
+  .row { display:flex; justify-content:space-between; align-items:center; margin:.6rem 0 1.2rem; color:var(--muted); }
+  #count.warn { color:var(--accent); font-weight:700; }
+  button { width:100%; padding:1rem; font:inherit; font-size:1.2rem; font-weight:800; color:#2b1055;
+    background:var(--accent); border:0; border-radius:14px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  button:focus-visible { outline:3px solid var(--fg); outline-offset:3px; }
+  #msg { margin-top:1rem; min-height:1.5rem; font-weight:700; }
+  #msg.err { color:#ff9aa8; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Partypost</h1>
+  <p>Schreib einen Gag, ein Gerücht oder einen Gedanken. Er erscheint anonym auf dem großen Bildschirm.</p>
+  <textarea id="t" maxlength="140" placeholder="Was soll alle erfahren?" aria-label="Dein Beitrag"></textarea>
+  <div class="row"><span>Max. 140 Zeichen</span><span id="count">0 / 140</span></div>
+  <button id="b" disabled>Auf den Bildschirm</button>
+  <div id="msg" role="status"></div>
+</main>
+<script>
+  const t = document.getElementById('t'), b = document.getElementById('b'),
+        count = document.getElementById('count'), msg = document.getElementById('msg');
+  function update() {
+    const n = [...t.value].length;
+    count.textContent = n + ' / 140';
+    count.classList.toggle('warn', n >= 120);
+    b.disabled = !t.value.trim();
+  }
+  t.addEventListener('input', update);
+  b.addEventListener('click', async () => {
+    b.disabled = true; msg.className = ''; msg.textContent = '';
+    try {
+      const r = await fetch('/api/posts', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: t.value }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Das hat nicht geklappt.');
+      t.value = ''; msg.textContent = 'Gesendet! Gleich siehst du es auf dem Bildschirm.';
+    } catch (e) { msg.className = 'err'; msg.textContent = e.message; }
+    update();
+  });
+  update();
+</script>
+</body>
+</html>

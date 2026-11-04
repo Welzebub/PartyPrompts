@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partypost – Moderation</title>
+<style>
+  body { font-family:system-ui,sans-serif; max-width:40rem; margin:2rem auto; padding:0 1rem; }
+  li { display:flex; gap:1rem; justify-content:space-between; align-items:center; padding:.6rem 0; border-bottom:1px solid #ddd; }
+  button { padding:.4rem .8rem; cursor:pointer; }
+</style>
+</head>
+<body>
+<h1>Moderation</h1>
+<p>Hier kannst du Beiträge löschen. Sie verschwinden innerhalb weniger Sekunden vom Bildschirm.</p>
+<ul id="l"></ul>
+<script>
+  const key = new URLSearchParams(location.search).get('key') || '';
+  const l = document.getElementById('l');
+  async function load() {
+    const list = await (await fetch('/api/posts', { cache:'no-store' })).json();
+    l.textContent = '';
+    if (!list.length) { l.textContent = 'Noch keine Beiträge.'; return; }
+    for (const p of list.slice().reverse()) {
+      const li = document.createElement('li'), s = document.createElement('span'), b = document.createElement('button');
+      s.textContent = p.text; b.textContent = 'Löschen';
+      b.onclick = async () => {
+        const r = await fetch('/api/posts/' + p.id + '?key=' + encodeURIComponent(key), { method:'DELETE' });
+        if (!r.ok) alert('Falscher oder fehlender Schlüssel.'); else load();
+      };
+      li.append(s, b); l.append(li);
+    }
+  }
+  load(); setInterval(load, 5000);
+</script>
+</body>
+</html>
