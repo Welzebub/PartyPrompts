@@ -5,17 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Partypost – Moderation</title>
 <style>
-  body { font-family:system-ui,sans-serif; max-width:42rem; margin:2rem auto; padding:0 1rem; line-height:1.4; }
+  body { font-family:system-ui,sans-serif; max-width:46rem; margin:2rem auto; padding:0 1rem 4rem; line-height:1.45; }
   nav { display:flex; gap:1.2rem; font-size:.9rem; margin-bottom:1rem; }
+  h2 { margin:2.2rem 0 .5rem; font-size:1.2rem; border-bottom:2px solid #ddd; padding-bottom:.3rem; }
+  .hint { color:#555; font-size:.92rem; margin:.2rem 0 .8rem; }
+  ul { list-style:none; padding:0; }
   li { display:flex; flex-wrap:wrap; gap:.6rem 1rem; justify-content:space-between; align-items:center; padding:.7rem 0; border-bottom:1px solid #ddd; }
   li .txt { flex:1 1 18rem; overflow-wrap:anywhere; }
-  li .btns { display:flex; gap:.5rem; }
-  ul { list-style:none; padding:0; }
+  .btns { display:flex; gap:.5rem; flex-wrap:wrap; }
   button { padding:.4rem .8rem; cursor:pointer; }
-  textarea { width:100%; height:6rem; font:inherit; padding:.5rem; }
+  textarea { width:100%; font:inherit; padding:.5rem; }
+  textarea.list { height:14rem; }
   .edit { flex:1 1 100%; }
+  .edit textarea { height:6rem; }
   .meta { display:flex; justify-content:space-between; align-items:center; margin-top:.4rem; gap:.5rem; }
-  .err { color:#b00020; font-weight:600; }
+  .opts label { display:block; margin:.45rem 0; }
+  #status { min-height:1.4rem; font-weight:600; }
+  #status.err { color:#b00020; }
+  #status.ok { color:#1b6e2d; }
   #keybox { margin:1rem 0; padding:.8rem; background:#f3f0fa; border-radius:8px; }
 </style>
 </head>
@@ -26,33 +33,102 @@
   <label>Admin-Schlüssel <input id="k" type="password" autocomplete="off"></label>
   <button id="kb" type="button">Übernehmen</button>
 </div>
-<p>Hier kannst du Beiträge bearbeiten oder löschen. Änderungen erscheinen innerhalb weniger Sekunden auf dem Bildschirm.</p>
-<div id="status" class="err" role="status"></div>
+<div id="status" role="status"></div>
+
+<h2>Anzeige</h2>
+<div class="opts">
+  <label><input type="checkbox" id="s_ticker"> Breaking-News-Balken anzeigen (in allen Modi)</label>
+  <label><input type="checkbox" id="s_intros"> Zufällige Intro-Zeilen über den Beiträgen</label>
+  <label><input type="checkbox" id="s_authors"> Zufällige Verfasser*innen unter den Beiträgen</label>
+  <label><input type="checkbox" id="s_auto"> Automatisch zwischen Modern und Stummfilm wechseln, alle
+    <input type="number" id="s_min" min="1" max="60" style="width:4.5rem"> Minuten</label>
+</div>
+<p class="hint">Änderungen gelten sofort und erscheinen innerhalb weniger Sekunden auf dem Bildschirm.</p>
+
+<h2>Beiträge</h2>
 <ul id="l"></ul>
+
+<h2>Intro-Zeilen</h2>
+<p class="hint">Eine Zeile pro Eintrag. Sie werden zufällig über die Beiträge gesetzt.</p>
+<textarea id="intros" class="list" aria-label="Intro-Zeilen"></textarea>
+<div class="btns" style="margin-top:.5rem">
+  <button id="introsSave" type="button">Speichern</button>
+  <button id="introsReset" type="button">Auf Standard zurücksetzen</button>
+</div>
+
+<h2>Verfasser*innen</h2>
+<p class="hint">Eine Zeile pro Name. Angezeigt als „~Verfasser*in: Name“.</p>
+<textarea id="authors" class="list" aria-label="Verfasser*innen"></textarea>
+<div class="btns" style="margin-top:.5rem">
+  <button id="authorsSave" type="button">Speichern</button>
+  <button id="authorsReset" type="button">Auf Standard zurücksetzen</button>
+</div>
+
+<h2>Dauerhaft sichern</h2>
+<p class="hint">Im kostenlosen Render-Tarif gehen Beiträge, Listen und Einstellungen bei einem Neustart oder neuen Deploy verloren.
+  Das Backup enthält alles. Wenn du die Datei als <code>seed.json</code> in dein GitHub-Repo legst (neben <code>server.js</code>),
+  startet der Server künftig immer mit diesem Stand.</p>
+<div class="btns">
+  <button id="dl" type="button">Backup herunterladen</button>
+  <input id="up" type="file" accept="application/json,.json" aria-label="Backup-Datei wählen">
+  <button id="upb" type="button">Backup einspielen</button>
+</div>
+
 <script>
   const $ = id => document.getElementById(id);
   const l = $('l'), status = $('status'), keybox = $('keybox');
   let key = new URLSearchParams(location.search).get('key') || '';
   try { key = key || sessionStorage.getItem('pp_key') || ''; } catch {}
   keybox.hidden = !!key;
-  let editing = false;
+  let editing = false, cur = { settings: {}, intros: [], authors: [] };
 
-  function needKey(msg) { key = ''; keybox.hidden = false; status.textContent = msg; try { sessionStorage.removeItem('pp_key'); } catch {} }
+  function setStatus(msg, ok) { status.textContent = msg || ''; status.className = msg ? (ok ? 'ok' : 'err') : ''; }
+  function needKey(msg) { key = ''; keybox.hidden = false; setStatus(msg); try { sessionStorage.removeItem('pp_key'); } catch {} }
   $('kb').onclick = () => {
-    key = $('k').value.trim(); status.textContent = '';
+    key = $('k').value.trim(); setStatus('');
     try { sessionStorage.setItem('pp_key', key); } catch {}
     keybox.hidden = !!key;
   };
-  const q = () => '?key=' + encodeURIComponent(key);
 
-  async function api(method, id, body) {
-    if (!key) { needKey('Bitte zuerst den Admin-Schlüssel eingeben.'); return false; }
-    const r = await fetch('/api/posts/' + id + q(), { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
-    if (r.status === 403) { needKey('Falscher Schlüssel.'); return false; }
-    if (!r.ok) { const d = await r.json().catch(() => ({})); status.textContent = d.error || 'Das hat nicht geklappt.'; return false; }
-    status.textContent = ''; return true;
+  // Schickt eine geschützte Anfrage; gibt die Antwort zurück oder null bei Fehler
+  async function call(method, path, body) {
+    if (!key) { needKey('Bitte zuerst den Admin-Schlüssel eingeben.'); return null; }
+    const r = await fetch(path + '?key=' + encodeURIComponent(key), {
+      method, headers: { 'Content-Type': 'application/json' }, body: body !== undefined ? JSON.stringify(body) : undefined });
+    if (r.status === 403) { needKey('Falscher Schlüssel.'); return null; }
+    if (!r.ok) { const d = await r.json().catch(() => ({})); setStatus(d.error || 'Das hat nicht geklappt.'); return null; }
+    setStatus('');
+    return r;
   }
 
+  /* ---------- Einstellungen ---------- */
+  function fillSettings() {
+    const s = cur.settings;
+    $('s_ticker').checked = !!s.ticker; $('s_intros').checked = !!s.intros; $('s_authors').checked = !!s.authors;
+    $('s_auto').checked = !!s.autoSwitch; $('s_min').value = s.switchMinutes || 3;
+  }
+  async function saveSettings() {
+    const body = { ticker: $('s_ticker').checked, intros: $('s_intros').checked, authors: $('s_authors').checked,
+                   autoSwitch: $('s_auto').checked, switchMinutes: Number($('s_min').value) || 3 };
+    const r = await call('PUT', '/api/settings', body);
+    if (r) { cur.settings = (await r.json()).settings; setStatus('Gespeichert.', true); }
+    fillSettings();
+  }
+  ['s_ticker', 's_intros', 's_authors', 's_auto', 's_min'].forEach(id => $(id).addEventListener('change', saveSettings));
+
+  /* ---------- Listen ---------- */
+  function fillLists() { $('intros').value = cur.intros.join('\n'); $('authors').value = cur.authors.join('\n'); }
+  async function saveList(name, value) {
+    const r = await call('PUT', '/api/lists', { [name]: value });
+    if (r) { const d = await r.json(); cur.intros = d.intros; cur.authors = d.authors; fillLists(); setStatus('Gespeichert.', true); }
+  }
+  const lines = id => $(id).value.split('\n');
+  $('introsSave').onclick = () => saveList('intros', lines('intros'));
+  $('authorsSave').onclick = () => saveList('authors', lines('authors'));
+  $('introsReset').onclick = () => { if (confirm('Intro-Zeilen auf die Standardliste zurücksetzen? Eigene Änderungen gehen verloren.')) saveList('intros', null); };
+  $('authorsReset').onclick = () => { if (confirm('Verfasser*innen auf die Standardliste zurücksetzen? Eigene Änderungen gehen verloren.')) saveList('authors', null); };
+
+  /* ---------- Beiträge ---------- */
   function startEdit(li, p) {
     editing = true;
     li.textContent = '';
@@ -65,17 +141,12 @@
     const btns = document.createElement('div'); btns.className = 'btns';
     const ok = document.createElement('button'); ok.textContent = 'Speichern';
     const no = document.createElement('button'); no.textContent = 'Abbrechen';
-    ok.onclick = async () => { if (await api('PUT', p.id, { text: ta.value })) { editing = false; load(); } };
-    no.onclick = () => { editing = false; load(); };
+    ok.onclick = async () => { if (await call('PUT', '/api/posts/' + p.id, { text: ta.value })) { editing = false; loadPosts(); } };
+    no.onclick = () => { editing = false; loadPosts(); };
     btns.append(ok, no); meta.append(cnt, btns); wrap.append(ta, meta); li.append(wrap);
     ta.focus();
   }
-
-  async function load() {
-    if (editing) return;
-    let list = [];
-    try { list = await (await fetch('/api/posts', { cache: 'no-store' })).json(); } catch { return; }
-    if (editing) return;
+  function renderPosts(list) {
     l.textContent = '';
     if (!list.length) { l.textContent = 'Noch keine Beiträge.'; return; }
     for (const p of list.slice().reverse()) {
@@ -84,11 +155,46 @@
       const btns = document.createElement('div'); btns.className = 'btns';
       const e = document.createElement('button'); e.textContent = 'Bearbeiten'; e.onclick = () => startEdit(li, p);
       const d = document.createElement('button'); d.textContent = 'Löschen';
-      d.onclick = async () => { if (await api('DELETE', p.id)) load(); };
+      d.onclick = async () => { if (await call('DELETE', '/api/posts/' + p.id)) loadPosts(); };
       btns.append(e, d); li.append(s, btns); l.append(li);
     }
   }
-  load(); setInterval(load, 5000);
+  async function fetchState() { return (await fetch('/api/state', { cache: 'no-store' })).json(); }
+  async function loadPosts() {
+    if (editing) return;
+    try { const s = await fetchState(); if (!editing) renderPosts(s.posts); } catch {}
+  }
+  async function loadAll() {
+    try {
+      const s = await fetchState();
+      cur = { settings: s.settings, intros: s.intros, authors: s.authors };
+      fillSettings(); fillLists(); renderPosts(s.posts);
+    } catch { setStatus('Der Server antwortet nicht.'); }
+  }
+
+  /* ---------- Backup ---------- */
+  $('dl').onclick = async () => {
+    const r = await call('GET', '/api/backup');
+    if (!r) return;
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'partypost-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    setStatus('Backup heruntergeladen.', true);
+  };
+  $('upb').onclick = async () => {
+    const f = $('up').files[0];
+    if (!f) { setStatus('Bitte zuerst eine Backup-Datei wählen.'); return; }
+    let data;
+    try { data = JSON.parse(await f.text()); } catch { setStatus('Die Datei ist kein gültiges JSON.'); return; }
+    if (!confirm('Backup einspielen? Alle aktuellen Beiträge, Listen und Einstellungen werden ersetzt.')) return;
+    const r = await call('POST', '/api/restore', data);
+    if (r) { const d = await r.json(); setStatus('Backup eingespielt (' + d.posts + ' Beiträge).', true); loadAll(); }
+  };
+
+  loadAll(); setInterval(loadPosts, 5000);
 </script>
 </body>
 </html>
