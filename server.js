@@ -29,7 +29,12 @@ http.createServer((req, res) => {
   const p = url.pathname;
 
   if (req.method === 'GET' && pages[p]) {
-    return send(res, 200, fs.readFileSync(path.join(__dirname, 'public', pages[p]), 'utf8'), 'text/html; charset=utf-8');
+    for (const dir of [path.join(__dirname, 'public'), __dirname]) {
+      try {
+        return send(res, 200, fs.readFileSync(path.join(dir, pages[p]), 'utf8'), 'text/html; charset=utf-8');
+      } catch {}
+    }
+    return send(res, 500, 'Datei ' + pages[p] + ' fehlt im Repo (Ordner public oder neben server.js).', 'text/plain; charset=utf-8');
   }
 
   if (p === '/api/posts' && req.method === 'GET') {
