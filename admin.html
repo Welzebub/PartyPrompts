@@ -5,30 +5,87 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Partypost – Moderation</title>
 <style>
-  body { font-family:system-ui,sans-serif; max-width:40rem; margin:2rem auto; padding:0 1rem; }
-  li { display:flex; gap:1rem; justify-content:space-between; align-items:center; padding:.6rem 0; border-bottom:1px solid #ddd; }
+  body { font-family:system-ui,sans-serif; max-width:42rem; margin:2rem auto; padding:0 1rem; line-height:1.4; }
+  nav { display:flex; gap:1.2rem; font-size:.9rem; margin-bottom:1rem; }
+  li { display:flex; flex-wrap:wrap; gap:.6rem 1rem; justify-content:space-between; align-items:center; padding:.7rem 0; border-bottom:1px solid #ddd; }
+  li .txt { flex:1 1 18rem; overflow-wrap:anywhere; }
+  li .btns { display:flex; gap:.5rem; }
+  ul { list-style:none; padding:0; }
   button { padding:.4rem .8rem; cursor:pointer; }
+  textarea { width:100%; height:6rem; font:inherit; padding:.5rem; }
+  .edit { flex:1 1 100%; }
+  .meta { display:flex; justify-content:space-between; align-items:center; margin-top:.4rem; gap:.5rem; }
+  .err { color:#b00020; font-weight:600; }
+  #keybox { margin:1rem 0; padding:.8rem; background:#f3f0fa; border-radius:8px; }
 </style>
 </head>
 <body>
+<nav aria-label="Weitere Seiten"><a href="/">Eingabe</a><a href="/show">Diashow</a></nav>
 <h1>Moderation</h1>
-<p>Hier kannst du Beiträge löschen. Sie verschwinden innerhalb weniger Sekunden vom Bildschirm.</p>
+<div id="keybox" hidden>
+  <label>Admin-Schlüssel <input id="k" type="password" autocomplete="off"></label>
+  <button id="kb" type="button">Übernehmen</button>
+</div>
+<p>Hier kannst du Beiträge bearbeiten oder löschen. Änderungen erscheinen innerhalb weniger Sekunden auf dem Bildschirm.</p>
+<div id="status" class="err" role="status"></div>
 <ul id="l"></ul>
 <script>
-  const key = new URLSearchParams(location.search).get('key') || '';
-  const l = document.getElementById('l');
+  const $ = id => document.getElementById(id);
+  const l = $('l'), status = $('status'), keybox = $('keybox');
+  let key = new URLSearchParams(location.search).get('key') || '';
+  try { key = key || sessionStorage.getItem('pp_key') || ''; } catch {}
+  keybox.hidden = !!key;
+  let editing = false;
+
+  function needKey(msg) { key = ''; keybox.hidden = false; status.textContent = msg; try { sessionStorage.removeItem('pp_key'); } catch {} }
+  $('kb').onclick = () => {
+    key = $('k').value.trim(); status.textContent = '';
+    try { sessionStorage.setItem('pp_key', key); } catch {}
+    keybox.hidden = !!key;
+  };
+  const q = () => '?key=' + encodeURIComponent(key);
+
+  async function api(method, id, body) {
+    if (!key) { needKey('Bitte zuerst den Admin-Schlüssel eingeben.'); return false; }
+    const r = await fetch('/api/posts/' + id + q(), { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    if (r.status === 403) { needKey('Falscher Schlüssel.'); return false; }
+    if (!r.ok) { const d = await r.json().catch(() => ({})); status.textContent = d.error || 'Das hat nicht geklappt.'; return false; }
+    status.textContent = ''; return true;
+  }
+
+  function startEdit(li, p) {
+    editing = true;
+    li.textContent = '';
+    const wrap = document.createElement('div'); wrap.className = 'edit';
+    const ta = document.createElement('textarea'); ta.maxLength = 280; ta.value = p.text;
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const cnt = document.createElement('span');
+    const upd = () => { cnt.textContent = [...ta.value].length + ' / 280'; };
+    ta.addEventListener('input', upd); upd();
+    const btns = document.createElement('div'); btns.className = 'btns';
+    const ok = document.createElement('button'); ok.textContent = 'Speichern';
+    const no = document.createElement('button'); no.textContent = 'Abbrechen';
+    ok.onclick = async () => { if (await api('PUT', p.id, { text: ta.value })) { editing = false; load(); } };
+    no.onclick = () => { editing = false; load(); };
+    btns.append(ok, no); meta.append(cnt, btns); wrap.append(ta, meta); li.append(wrap);
+    ta.focus();
+  }
+
   async function load() {
-    const list = await (await fetch('/api/posts', { cache:'no-store' })).json();
+    if (editing) return;
+    let list = [];
+    try { list = await (await fetch('/api/posts', { cache: 'no-store' })).json(); } catch { return; }
+    if (editing) return;
     l.textContent = '';
     if (!list.length) { l.textContent = 'Noch keine Beiträge.'; return; }
     for (const p of list.slice().reverse()) {
-      const li = document.createElement('li'), s = document.createElement('span'), b = document.createElement('button');
-      s.textContent = p.text; b.textContent = 'Löschen';
-      b.onclick = async () => {
-        const r = await fetch('/api/posts/' + p.id + '?key=' + encodeURIComponent(key), { method:'DELETE' });
-        if (!r.ok) alert('Falscher oder fehlender Schlüssel.'); else load();
-      };
-      li.append(s, b); l.append(li);
+      const li = document.createElement('li');
+      const s = document.createElement('span'); s.className = 'txt'; s.textContent = p.text;
+      const btns = document.createElement('div'); btns.className = 'btns';
+      const e = document.createElement('button'); e.textContent = 'Bearbeiten'; e.onclick = () => startEdit(li, p);
+      const d = document.createElement('button'); d.textContent = 'Löschen';
+      d.onclick = async () => { if (await api('DELETE', p.id)) load(); };
+      btns.append(e, d); li.append(s, btns); l.append(li);
     }
   }
   load(); setInterval(load, 5000);

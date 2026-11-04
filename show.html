@@ -4,37 +4,149 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Partypost – Bildschirm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
 <style>
   html, body { margin:0; height:100%; overflow:hidden; }
   body { font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; color:#fff6e0; background:#2b1055;
     transition: background-color 1.2s ease; }
-  #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:8vmin; }
+  #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:8vmin 8vmin 17vmin; }
   #text { margin:0; max-width:90vw; text-align:center; font-weight:800; line-height:1.15;
-    overflow-wrap:anywhere; opacity:0; transition: opacity .9s ease; }
+    overflow-wrap:anywhere; opacity:0; transition: opacity .9s ease; position:relative; z-index:2; }
   #text.on { opacity:1; }
-  #hint { position:absolute; left:0; right:0; bottom:2.5vmin; text-align:center; font-size:2.4vmin; opacity:.75; }
-  @media (prefers-reduced-motion: reduce) { body, #text { transition:none; } }
+
+  #hint { position:fixed; left:2vmin; top:1vmin; font-size:max(2vmin,12px); opacity:.7; z-index:5; }
+  #nav { position:fixed; right:2vmin; top:1vmin; display:flex; gap:1.6vmin; align-items:center; z-index:5;
+    font-size:max(2vmin,12px); background:rgba(0,0,0,.5); padding:.5vmin 1.6vmin; border-radius:2vmin;
+    transition:opacity .6s ease; }
+  #nav a, #nav button { color:inherit; font:inherit; background:none; border:0; padding:0; cursor:pointer; text-decoration:underline; }
+  body:not(.active) #nav:not(:focus-within) { opacity:0; }
+
+  /* Breaking-News-Ticker */
+  #ticker { position:absolute; left:0; right:0; bottom:0; height:max(10vmin,52px); display:flex; z-index:4;
+    background:rgba(0,0,0,.72); border-top:.5vmin solid #d90429; }
+  #tlabel { flex:none; display:flex; align-items:center; padding:0 3vmin; background:#d90429; color:#fff;
+    font-weight:800; font-size:max(3.4vmin,16px); letter-spacing:.04em; }
+  #tview { flex:1; overflow:hidden; display:flex; align-items:center; }
+  #ttrack { display:flex; width:max-content; white-space:nowrap; align-items:center; font-size:max(4vmin,18px); color:#fff; will-change:transform; }
+  #ttrack i { font-style:normal; color:#ffb703; margin:0 3vmin; }
+  @keyframes scroll { from { transform:translateX(0); } to { transform:translateX(-50%); } }
+
+  /* Stummfilm-Modus */
+  #frame, #grain, #vignette { display:none; position:absolute; pointer-events:none; }
+  body.silent { background:#000; color:#fff; }
+  body.silent #ticker { display:none; }
+  body.silent #stage { padding:11vmin; animation: flicker 4.3s steps(1) infinite; }
+  body.silent #text { font-family:"Cinzel Decorative","Cinzel","Palatino Linotype",Georgia,serif; font-weight:700; letter-spacing:.03em; line-height:1.35; }
+  body.silent #frame { display:block; inset:4.5vmin; border:.6vmin double #fff; z-index:1; }
+  body.silent #vignette { display:block; inset:0; z-index:3; background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.85) 100%); }
+  body.silent #grain { display:block; inset:-50%; z-index:3; opacity:.13; animation: grain .7s steps(6) infinite;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+  @keyframes grain { 0%{transform:translate(0,0)} 20%{transform:translate(-4%,3%)} 40%{transform:translate(3%,-5%)} 60%{transform:translate(-6%,-2%)} 80%{transform:translate(5%,4%)} 100%{transform:translate(0,0)} }
+  @keyframes flicker { 0%,100%{opacity:1} 30%{opacity:.95} 31%{opacity:1} 72%{opacity:.97} 73%{opacity:1} }
+  @media (prefers-reduced-motion: reduce) { body, #text { transition:none; } body.silent #grain, body.silent #stage { animation:none; } }
 </style>
 </head>
 <body>
 <div id="stage"><p id="text"></p></div>
+<div id="frame"></div><div id="vignette"></div><div id="grain"></div>
 <div id="hint"></div>
+<nav id="nav" aria-label="Navigation">
+  <a href="/">Eingabe</a><a href="/admin">Moderation</a>
+  <button id="mode" type="button" aria-pressed="false">Stummfilm-Modus</button>
+</nav>
+<div id="ticker" aria-label="Alle bisherigen Beiträge">
+  <div id="tlabel">BREAKING NEWS</div>
+  <div id="tview"><div id="ttrack"></div></div>
+</div>
 <script>
+  const $ = id => document.getElementById(id);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
   const COLORS = ['#2b1055','#7a1f5c','#0b5563','#a33b20','#1f4d2b','#3a2a8c'];
-  const textEl = document.getElementById('text'), hint = document.getElementById('hint');
-  hint.textContent = 'Mitmachen: ' + location.host;
+  const textEl = $('text'), track = $('ttrack'), tview = $('tview'), modeBtn = $('mode');
+  $('hint').textContent = 'Mitmachen: ' + location.host;
 
-  let all = new Map(), seen = new Set(), fresh = [], bag = [], last = null, first = true;
+  let all = new Map(), seen = new Set(), fresh = [], bag = [], last = null, first = true, boot = null;
+  let current = null, lastList = [], silent = false;
+  try { silent = localStorage.getItem('pp_mode') === 'silent'; } catch {}
 
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
+  /* ---------- Modus ---------- */
+  function sizeFor(n) {
+    if (silent) return n <= 40 ? '8vmin' : n <= 90 ? '6vmin' : n <= 160 ? '4.8vmin' : '3.8vmin';
+    return n <= 40 ? '10vmin' : n <= 90 ? '7.5vmin' : n <= 160 ? '6vmin' : '4.8vmin';
+  }
+  function paint(p) {
+    document.body.style.backgroundColor = silent ? '#000' : COLORS[parseInt(p.id.slice(0, 4), 16) % COLORS.length];
+    textEl.style.fontSize = sizeFor([...p.text].length);
+  }
+  function applyMode() {
+    document.body.classList.toggle('silent', silent);
+    modeBtn.textContent = silent ? 'Modern-Modus' : 'Stummfilm-Modus';
+    modeBtn.setAttribute('aria-pressed', String(silent));
+    if (current) paint(current); else document.body.style.backgroundColor = silent ? '#000' : COLORS[0];
+    if (!silent) { tickSig = ''; renderTicker(lastList); }
+  }
+  modeBtn.addEventListener('click', () => {
+    silent = !silent;
+    try { localStorage.setItem('pp_mode', silent ? 'silent' : 'modern'); } catch {}
+    applyMode();
+  });
+
+  /* ---------- Ticker ---------- */
+  let tickSig = '', tickDur = 0, tickStart = 0;
+  function renderTicker(list) {
+    lastList = list;
+    if (silent) return;
+    const sig = list.map(p => p.id + ':' + p.text).join('\u0001');
+    if (sig === tickSig) return;
+    const prog = tickDur ? (((performance.now() - tickStart) / 1000) % tickDur) / tickDur : 0;
+    track.style.animation = 'none';
+    const items = list.length ? list.map(p => p.text) : ['Noch keine Eilmeldungen. Schreibt los unter ' + location.host];
+    const half = n => {
+      const f = document.createDocumentFragment();
+      for (let k = 0; k < n; k++) for (const t of items) {
+        const s = document.createElement('span'); s.textContent = t;
+        const d = document.createElement('i'); d.textContent = '\u25C6';
+        f.append(s, d);
+      }
+      return f;
+    };
+    let w = 0;
+    for (let n = 1; n <= 12; n++) {
+      track.textContent = '';
+      track.append(half(n), half(n));
+      w = track.getBoundingClientRect().width / 2;
+      if (w >= tview.clientWidth) break;
+    }
+    if (!w) return;
+    tickSig = sig;
+    const speed = Math.max(90, innerWidth * 0.08);   // Pixel pro Sekunde
+    tickDur = w / speed;
+    tickStart = performance.now() - prog * tickDur * 1000;
+    track.style.animation = `scroll ${tickDur}s linear infinite`;
+    track.style.animationDelay = `${-prog * tickDur}s`;
+  }
+
+  /* ---------- Beiträge holen (alle 4 s, hält auch Render wach) ---------- */
   async function poll() {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
     try {
-      const list = await (await fetch('/api/posts', { cache:'no-store' })).json();
+      const r = await fetch('/api/posts', { cache: 'no-store', signal: ctrl.signal });
+      if (!r.ok) throw new Error('bad status');
+      const b = r.headers.get('X-Boot');
+      const list = await r.json();
+      if (boot && b && b !== boot) { location.reload(); return; }   // Server neu gestartet: Seite neu laden
+      boot = b || boot;
       all = new Map(list.map(p => [p.id, p]));
-      for (const p of list) if (!seen.has(p.id)) { seen.add(p.id); if (!first) fresh.push(p.id); else bag.push(p.id); }
+      for (const p of list) if (!seen.has(p.id)) { seen.add(p.id); (first ? bag : fresh).push(p.id); }
+      if (first) shuffle(bag);
       first = false;
-    } catch {}
+      renderTicker(list);
+    } catch {} finally { clearTimeout(to); }
   }
 
   function next() {
@@ -48,30 +160,42 @@
     return bag.length ? all.get(bag.pop()) : null;
   }
 
-  function sizeFor(n) { return n <= 40 ? '10vmin' : n <= 90 ? '7.5vmin' : '6vmin'; }
-
   async function loop() {
     await poll();
     for (;;) {
       const p = next();
       textEl.classList.remove('on');
-      await new Promise(r => setTimeout(r, 900));
+      await sleep(900);
       if (!p) {
+        current = null;
+        document.body.style.backgroundColor = silent ? '#000' : COLORS[0];
         textEl.textContent = 'Noch nichts da. Scannt den QR-Code und schreibt los!';
-        textEl.style.fontSize = '6vmin';
+        textEl.style.fontSize = silent ? '5vmin' : '6vmin';
         textEl.classList.add('on');
-        await new Promise(r => setTimeout(r, 4000));
+        await sleep(4000);
         await poll();
         continue;
       }
-      last = p.id;
-      document.body.style.backgroundColor = COLORS[parseInt(p.id.slice(0, 4), 16) % COLORS.length];
+      last = p.id; current = p;
       textEl.textContent = p.text;
-      textEl.style.fontSize = sizeFor([...p.text].length);
+      paint(p);
       textEl.classList.add('on');
-      await new Promise(r => setTimeout(r, Math.min(14000, 6000 + p.text.length * 70)));
+      await sleep(Math.min(16000, 6000 + p.text.length * 60));
     }
   }
+
+  /* ---------- Bildschirm an lassen, Navigation ein-/ausblenden ---------- */
+  async function wake() { try { if ('wakeLock' in navigator && document.visibilityState === 'visible') await navigator.wakeLock.request('screen'); } catch {} }
+  document.addEventListener('visibilitychange', () => { wake(); if (document.visibilityState === 'visible') poll(); });
+  let idle;
+  function activate() {
+    document.body.classList.add('active');
+    clearTimeout(idle);
+    idle = setTimeout(() => document.body.classList.remove('active'), 5000);
+  }
+  ['mousemove', 'pointerdown', 'keydown', 'touchstart'].forEach(e => addEventListener(e, activate, { passive: true }));
+
+  applyMode(); activate(); wake();
   setInterval(poll, 4000);
   loop();
 </script>

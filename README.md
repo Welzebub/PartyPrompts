@@ -2,9 +2,10 @@
 
 Zwei Seiten, keine Abhängigkeiten (nur Node 18+):
 
-- `/`      Eingabeseite für die Gäste (max. 140 Zeichen)
-- `/show`  Diashow für den Bildschirm (zufällig, Dauerschleife, neue Beiträge kommen als Nächstes dran)
-- `/admin?key=DEIN_SCHLÜSSEL`  Beiträge löschen
+- `/`      Eingabeseite für die Gäste (max. 280 Zeichen)
+- `/show`  Diashow für den Bildschirm (zufällig, Dauerschleife, neue Beiträge kommen als Nächstes dran),
+           unten mit Breaking-News-Ticker; oben rechts umschaltbar auf Stummfilm-Modus
+- `/admin`  Beiträge bearbeiten und löschen (Schlüssel eingeben oder `?key=DEIN_SCHLÜSSEL` anhängen)
 
 ## Lokal testen
     ADMIN_KEY=geheim node server.js
@@ -19,4 +20,5 @@ dann http://localhost:3000 öffnen.
 
 Hinweis: Im Gratis-Tarif schläft der Dienst nach Inaktivität ein (erster Aufruf dauert ~1 Minute)
 und der Speicher wird bei Neustarts geleert. Für eine Party passt das, öffne die Seite
-einfach kurz vorher, damit sie wach ist.
+einfach kurz vorher, damit sie wach ist. Solange die /show-Seite offen ist, fragt sie alle 4 Sekunden
+neue Beiträge ab; das zählt für Render als Aktivität und hält den Dienst wach.
