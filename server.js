@@ -13,7 +13,10 @@ const MAX_POSTS = 1000;     // Obergrenze insgesamt
 const MAX_INTRO = 200;      // Zeichen pro Intro-Zeile
 const MAX_AUTHOR = 80;      // Zeichen pro Verfasser*in-Name
 const MAX_LIST = 300;       // Einträge pro Liste
-const COOLDOWN_MS = 4000;   // Mindestabstand pro Gerät/IP
+const COOLDOWN_MS = 4000;   // Mindestabstand pro Gerät/IP (Beiträge)
+const COOLDOWN_ENTRY_MS = 3000;  // Mindestabstand pro Gerät/IP (Einträge und Kommentare)
+const MAX_USER_COMMENT = 100;    // Zeichen pro Gästekommentar
+const MAX_USER_COMMENTS = 10;    // Gästekommentare pro Beitrag
 const BOOT = crypto.randomBytes(4).toString('hex'); // ändert sich bei jedem Serverstart
 
 const DEFAULT_INTROS = [
@@ -47,7 +50,48 @@ const DEFAULT_AUTHORS = [
   'Michael Wendler', 'Die Illuminaten', 'Die Bielefeld-Verschwörung', 'Der Mann im Mond', 'Die Zahnfee', 'Dr. Google',
   'Frau Holle', 'Erwin aus Hintertupfingen'
 ];
-const DEFAULT_SETTINGS = { ticker: true, intros: true, authors: true, autoSwitch: false, switchMinutes: 3 };
+const DEFAULT_USERNAMES = [
+  'flyingbird33', 'xXSlayer3000Xx', 'BikerBernd', 'Gemüsehans88', 'kaffeekanne_42', 'Sabine_aus_Essen', 'DerEchteKevin',
+  'pizzafan1999', 'NinjaOpa', 'wolke7_official', 'TrottelTom', 'SchnitzelKönig', 'Mettigel2000', 'lilaLaunebär',
+  'xX_Dark_Dieter_Xx', 'FrauMüller_73', 'Bratwurst_Basti', 'xxMondscheinxx', 'Hobbit_Holger', 'RentnerRalf', 'GamerGisela',
+  'Katzenpapa', 'der_dude_von_nebenan', 'Schnuffel_2005', 'OmaGertrud_offiziell', 'Toastbrot_Tobi', 'lecker_Lasagne',
+  'NachtschichtNorbert', 'krasserKevin_99', 'bernd_das_brot_fan', 'Teppichklopfer', 'hans.dampf.123', 'Glitzerpony',
+  'Stuhlkreis_Steffi', 'WLAN_Walter', 'Pfandflaschen_Paul', 'Chantal_ohne_Filter', 'Zahnarzt_Zoran', 'UserNichtGefunden404',
+  'ichBinEinFisch', 'anonym_aber_laut', 'Sockenmonster', 'Müsli_Maus', 'FahrradFrank', 'Teilzeit_Tobi', 'Tante_Erna_1951',
+  'Pommes_Peter', 'BasisdemokratieBernd', 'NixPlan_Nina', 'xX_NoScope_Nils_Xx', 'BrotBaron', 'Dr_Hasenfuß'
+];
+const DEFAULT_COMMENTS = [
+  'WAAAS?', 'wusst ichs doch!!1', 'heutzutage darf man echt nichts mehr sagen', 'Fake News', 'Lügenpresse',
+  'klick auf mein Profil und guck dir meine privaten Fotos an <3', 'endlich sagt es mal jemand',
+  'schon wieder so nen linksversiffter blödsinn', 'früher hätts das nicht gegeben', 'wurd auch langsam mal Zeit',
+  'Die da oben schon wieder', 'fffffsssdsdsd',
+  'Das ist doch alles gesteuert', 'Hab ich schon vor Jahren gesagt', 'Quelle?', 'Teilen, bevor es gelöscht wird!!!',
+  'Mein Onkel sagt das schon seit Jahren', 'Ich glaub nur, was ich selbst gegoogelt habe', 'lol',
+  'Bielefeld gibts nicht, das passt ins Bild', 'Das haben die Echsen so gewollt', 'Ist das jetzt Satire?', 'Ich bin raus.',
+  'Erster!', 'Kenn ich schon aus Telegram', 'Danke für nichts', 'Früher war mehr Lametta', 'Mein Kater hat das schon immer gesagt',
+  'unfassbar', 'Quatsch mit Soße', 'ok boomer', '+1', 'Boah ey', 'Link? Sonst Fake.', 'Das glaubt ihr doch selber nicht',
+  'Wer das glaubt, wird selig', 'Und wer bezahlt das alles?!', 'Ich verstehe nur Bahnhof', 'Teilen!!!1elf',
+  'Jaja, die Mondlandung war auch gefälscht', 'Alles nur Ablenkung vom Wesentlichen', 'Und dafür zahle ich Steuern?!',
+  'Alu-Hut sitzt ✔', 'Ich sag nur: Chemtrails.', 'Das wusste schon meine Oma', 'Hä?',
+  'Mir egal, ich bin nur wegen dem Buffet hier', 'Das ist ja wohl der Gipfel', 'Bitte löschen, mein Chef liest mit',
+  'nicht schon wieder', 'Das Orakel hat es kommen sehen', 'Ich hab\'s geahnt', 'Das sind doch Fakten!!!', 'Mimimi',
+  'Das ist alles Propaganda!', 'Reptiloiden-Alarm', 'Ist das in der Bibel?'
+];
+const DEFAULT_SETTINGS = { ticker: true, intros: true, authors: true, reactions: true, autoSwitch: false, switchMinutes: 3 };
+// Alle bearbeitbaren Textlisten: Schlüssel -> max. Zeichen pro Eintrag, Standardwerte
+const LISTS = {
+  intros:      { max: MAX_INTRO,  def: DEFAULT_INTROS },
+  authors:     { max: MAX_AUTHOR, def: DEFAULT_AUTHORS },
+  usernames:   { max: 60,         def: DEFAULT_USERNAMES },
+  commentPool: { max: 120,        def: DEFAULT_COMMENTS }
+};
+// Was Gäste auf /extras hinzufügen dürfen: Typ -> Liste, max. Zeichen
+const GUEST_ENTRY = {
+  author:   { key: 'authors',     max: 40 },
+  username: { key: 'usernames',   max: 30 },
+  intro:    { key: 'intros',      max: 100 },
+  comment:  { key: 'commentPool', max: 100 }
+};
 
 function clean1(s, max) { return [...String(s == null ? '' : s).replace(/\s+/g, ' ').trim()].slice(0, max).join(''); }
 function cleanList(arr, max) {
@@ -61,7 +105,7 @@ function cleanSettings(d, base) {
   base = base || DEFAULT_SETTINGS;
   const b = k => (d[k] === undefined ? !!base[k] : !!d[k]);
   const m = Math.round(Number(d.switchMinutes));
-  return { ticker: b('ticker'), intros: b('intros'), authors: b('authors'), autoSwitch: b('autoSwitch'),
+  return { ticker: b('ticker'), intros: b('intros'), authors: b('authors'), reactions: b('reactions'), autoSwitch: b('autoSwitch'),
            switchMinutes: m >= 1 && m <= 60 ? m : base.switchMinutes };
 }
 function validate(raw) {
@@ -70,6 +114,13 @@ function validate(raw) {
   if ([...text].length > MAX_LEN) return { error: `Maximal ${MAX_LEN} Zeichen.` };
   return { text };
 }
+function validateShort(raw, max) {
+  const text = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!text) return { error: 'Bitte etwas eingeben.' };
+  if ([...text].length > max) return { error: `Maximal ${max} Zeichen.` };
+  return { text };
+}
+function newId() { return crypto.randomBytes(6).toString('hex'); }
 function normalizeState(d) {
   if (Array.isArray(d)) d = { posts: d };   // altes Format: nur eine Liste von Beiträgen
   d = d && typeof d === 'object' ? d : {};
@@ -78,17 +129,24 @@ function normalizeState(d) {
     const v = validate(x && x.text);
     if (v.error) continue;
     let id = String(x.id || '');
-    if (!/^[a-f0-9]{4,32}$/.test(id) || ids.has(id)) id = crypto.randomBytes(6).toString('hex');
+    if (!/^[a-f0-9]{4,32}$/.test(id) || ids.has(id)) id = newId();
     ids.add(id);
-    posts.push({ id, text: v.text, t: Number(x.t) || Date.now() });
+    const cids = new Set(), comments = [];
+    for (const c of Array.isArray(x.comments) ? x.comments : []) {
+      const text = clean1(c && c.text, MAX_USER_COMMENT);
+      if (!text) continue;
+      let cid = String(c.id || '');
+      if (!/^[a-f0-9]{4,32}$/.test(cid) || cids.has(cid)) cid = newId();
+      cids.add(cid);
+      comments.push({ id: cid, text, t: Number(c.t) || Date.now() });
+      if (comments.length >= MAX_USER_COMMENTS) break;
+    }
+    posts.push({ id, text: v.text, t: Number(x.t) || Date.now(), comments });
     if (posts.length >= MAX_POSTS) break;
   }
-  return {
-    posts,
-    intros: cleanList(d.intros, MAX_INTRO) || DEFAULT_INTROS.slice(),
-    authors: cleanList(d.authors, MAX_AUTHOR) || DEFAULT_AUTHORS.slice(),
-    settings: cleanSettings(d.settings)
-  };
+  const out = { posts, settings: cleanSettings(d.settings) };
+  for (const k of Object.keys(LISTS)) out[k] = cleanList(d[k], LISTS[k].max) || LISTS[k].def.slice();
+  return out;
 }
 
 function load() {
@@ -100,8 +158,9 @@ function load() {
 let S = load();
 function save() { try { fs.writeFileSync(DATA_FILE, JSON.stringify(S)); } catch (e) { console.error(e.message); } }
 
-const lastPost = new Map();
-const pages = { '/': 'index.html', '/show': 'show.html', '/admin': 'admin.html' };
+const lastPost = new Map(), lastEntry = new Map();
+function clientIp(req) { return (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim(); }
+const pages = { '/': 'index.html', '/show': 'show.html', '/admin': 'admin.html', '/extras': 'extras.html' };
 
 function send(res, code, body, type = 'application/json; charset=utf-8', extra = {}) {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Boot': BOOT, ...extra });
@@ -129,14 +188,17 @@ http.createServer((req, res) => {
 
   // Alles, was Anzeige und Moderation brauchen: Beiträge (chronologisch), Einstellungen, Listen
   if (p === '/api/state' && req.method === 'GET') {
-    return send(res, 200, { posts: S.posts.map(({ id, text }) => ({ id, text })), settings: S.settings, intros: S.intros, authors: S.authors });
+    return send(res, 200, {
+      posts: S.posts.map(({ id, text, comments }) => ({ id, text, comments: comments.map(c => ({ id: c.id, text: c.text })) })),
+      settings: S.settings, intros: S.intros, authors: S.authors, usernames: S.usernames, commentPool: S.commentPool
+    });
   }
   if (p === '/api/posts' && req.method === 'GET') {
     return send(res, 200, S.posts.map(({ id, text }) => ({ id, text })));
   }
 
   if (p === '/api/posts' && req.method === 'POST') {
-    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    const ip = clientIp(req);
     const now = Date.now();
     if (now - (lastPost.get(ip) || 0) < COOLDOWN_MS) return send(res, 429, { error: 'Kurz warten, dann nochmal.' });
     return readJson(req, d => {
@@ -144,7 +206,7 @@ http.createServer((req, res) => {
       if (v.error) return send(res, 400, { error: v.error });
       if (S.posts.length >= MAX_POSTS) return send(res, 507, { error: 'Die Wand ist voll.' });
       lastPost.set(ip, now);
-      S.posts.push({ id: crypto.randomBytes(6).toString('hex'), text: v.text, t: now });
+      S.posts.push({ id: newId(), text: v.text, t: now, comments: [] });
       save();
       send(res, 201, { ok: true });
     });
@@ -179,17 +241,63 @@ http.createServer((req, res) => {
     });
   }
 
-  // Intro-Zeilen und Verfasser*innen: Array = speichern, null = auf Standard zurücksetzen
+  // Textlisten (Header, Verfasser*innen, Usernamen, Kommentar-Pool): Array = speichern, null = Standard
   if (p === '/api/lists' && req.method === 'PUT') {
     if (!isAdmin(url)) return send(res, 403, { error: 'Kein Zugriff.' });
     return readJson(req, d => {
-      if (d.intros === null) S.intros = DEFAULT_INTROS.slice();
-      else if (Array.isArray(d.intros)) S.intros = cleanList(d.intros, MAX_INTRO);
-      if (d.authors === null) S.authors = DEFAULT_AUTHORS.slice();
-      else if (Array.isArray(d.authors)) S.authors = cleanList(d.authors, MAX_AUTHOR);
+      for (const k of Object.keys(LISTS)) {
+        if (d[k] === null) S[k] = LISTS[k].def.slice();
+        else if (Array.isArray(d[k])) S[k] = cleanList(d[k], LISTS[k].max);
+      }
       save();
-      send(res, 200, { ok: true, intros: S.intros, authors: S.authors });
-    }, 262144);
+      const out = { ok: true };
+      for (const k of Object.keys(LISTS)) out[k] = S[k];
+      send(res, 200, out);
+    }, 524288);
+  }
+
+  // Gäste: neuen Eintrag in eine Liste (Verfasser*in, Username, Header, Zufalls-Kommentar)
+  if (p === '/api/entries' && req.method === 'POST') {
+    const ip = clientIp(req), now = Date.now();
+    if (now - (lastEntry.get(ip) || 0) < COOLDOWN_ENTRY_MS) return send(res, 429, { error: 'Kurz warten, dann nochmal.' });
+    return readJson(req, d => {
+      if (!Object.prototype.hasOwnProperty.call(GUEST_ENTRY, d.type)) return send(res, 400, { error: 'Unbekannte Art von Eintrag.' });
+      const spec = GUEST_ENTRY[d.type];
+      const v = validateShort(d.text, spec.max);
+      if (v.error) return send(res, 400, { error: v.error });
+      const list = S[spec.key];
+      if (list.some(x => x.toLowerCase() === v.text.toLowerCase())) return send(res, 409, { error: 'Das gibt es schon.' });
+      if (list.length >= MAX_LIST) return send(res, 507, { error: 'Die Liste ist voll.' });
+      lastEntry.set(ip, now);
+      list.push(v.text);
+      save();
+      send(res, 201, { ok: true });
+    });
+  }
+
+  // Gästekommentar zu einem bestimmten Beitrag
+  const cm = p.match(/^\/api\/posts\/([a-f0-9]+)\/comments$/);
+  if (cm && req.method === 'POST') {
+    const ip = clientIp(req), now = Date.now();
+    if (now - (lastEntry.get(ip) || 0) < COOLDOWN_ENTRY_MS) return send(res, 429, { error: 'Kurz warten, dann nochmal.' });
+    return readJson(req, d => {
+      const v = validateShort(d.text, MAX_USER_COMMENT);
+      if (v.error) return send(res, 400, { error: v.error });
+      const post = S.posts.find(x => x.id === cm[1]);
+      if (!post) return send(res, 404, { error: 'Beitrag nicht gefunden.' });
+      if (post.comments.length >= MAX_USER_COMMENTS) return send(res, 507, { error: 'Hier sind schon genug Kommentare.' });
+      lastEntry.set(ip, now);
+      post.comments.push({ id: newId(), text: v.text, t: now });
+      save();
+      send(res, 201, { ok: true });
+    });
+  }
+  const cd = p.match(/^\/api\/posts\/([a-f0-9]+)\/comments\/([a-f0-9]+)$/);
+  if (cd && req.method === 'DELETE') {
+    if (!isAdmin(url)) return send(res, 403, { error: 'Kein Zugriff.' });
+    const post = S.posts.find(x => x.id === cd[1]);
+    if (post) { post.comments = post.comments.filter(c => c.id !== cd[2]); save(); }
+    return send(res, 200, { ok: true });
   }
 
   // Dauerhafte Sicherung: alles als Datei herunterladen / wieder einspielen

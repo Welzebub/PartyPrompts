@@ -23,7 +23,10 @@
   button:focus-visible { outline:3px solid var(--fg); outline-offset:3px; }
   #msg { margin-top:1rem; min-height:1.5rem; font-weight:700; }
   #msg.err { color:#ff9aa8; }
-  nav { margin-top:2.5rem; font-size:.9rem; display:flex; gap:1.2rem; }
+  .more { display:block; margin-top:1.4rem; padding:.9rem 1rem; text-align:center; font-weight:700; color:var(--fg);
+    border:2px solid var(--muted); border-radius:14px; text-decoration:none; }
+  .more:hover, .more:focus-visible { border-color:var(--accent); color:var(--accent); outline:none; }
+  nav { margin-top:2.5rem; font-size:.9rem; display:flex; gap:1.2rem; flex-wrap:wrap; }
   nav a { color:var(--muted); }
 </style>
 </head>
@@ -35,6 +38,7 @@
   <div class="row"><span>Max. 280 Zeichen</span><span id="count">0 / 280</span></div>
   <button id="b" disabled>Auf den Bildschirm</button>
   <div id="msg" role="status"></div>
+  <a class="more" href="/extras">Kommentare, Namen oder Header hinzufügen</a>
   <nav aria-label="Weitere Seiten"><a href="/show">Diashow</a><a href="/admin">Moderation</a></nav>
 </main>
 <script>

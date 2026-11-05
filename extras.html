@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partypost – Mitmachen</title>
+<style>
+  :root { --bg:#2b1055; --fg:#fff6e0; --accent:#ffb703; --muted:#c9b8ee; --card:#3a1a6e; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--fg);
+    font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; display:flex; justify-content:center; }
+  main { width:100%; max-width:36rem; padding:2rem 1.25rem 3rem; }
+  h1 { font-size:2rem; margin:0 0 .4rem; font-weight:800; letter-spacing:-.02em; }
+  h2 { font-size:1.3rem; margin:2.2rem 0 .3rem; }
+  p { color:var(--muted); line-height:1.5; margin:0 0 1rem; }
+  label { display:block; font-weight:700; margin:1rem 0 .35rem; }
+  input[type=text], input[type=search], select, textarea { width:100%; padding:.85rem 1rem; font:inherit; font-size:1.05rem;
+    color:#1d0a3d; background:var(--fg); border:3px solid transparent; border-radius:12px; }
+  textarea { height:6rem; resize:none; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); }
+  .row { display:flex; justify-content:space-between; color:var(--muted); margin:.4rem 0 .8rem; font-size:.95rem; }
+  button.go { width:100%; padding:.95rem; font:inherit; font-size:1.1rem; font-weight:800; color:#2b1055;
+    background:var(--accent); border:0; border-radius:12px; cursor:pointer; margin-top:.4rem; }
+  button.go:disabled { opacity:.5; cursor:default; }
+  button:focus-visible, .post:focus-visible { outline:3px solid var(--fg); outline-offset:2px; }
+  .msg { min-height:1.4rem; margin-top:.7rem; font-weight:700; }
+  .msg.err { color:#ff9aa8; }
+  #posts { max-height:16rem; overflow-y:auto; margin-top:.6rem; border-radius:12px; background:var(--card); padding:.35rem; }
+  .post { display:block; width:100%; text-align:left; font:inherit; color:var(--fg); background:none; border:2px solid transparent;
+    border-radius:9px; padding:.6rem .7rem; margin:.15rem 0; cursor:pointer; overflow-wrap:anywhere; }
+  .post:hover { background:rgba(255,255,255,.08); }
+  .post[aria-pressed="true"] { border-color:var(--accent); background:rgba(255,183,3,.16); }
+  .empty { padding:.8rem; color:var(--muted); }
+  #chosen { color:var(--accent); font-weight:700; min-height:1.4rem; margin:.6rem 0 0; }
+  nav { margin-top:2.5rem; font-size:.9rem; display:flex; gap:1.2rem; flex-wrap:wrap; }
+  nav a { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Mehr mitmachen</h1>
+  <p>Füttere den Bildschirm mit eigenen Zutaten. Alles erscheint anonym und kann vom Gastgeber gelöscht werden.</p>
+
+  <h2>Neuen Eintrag hinzufügen</h2>
+  <label for="type">Was möchtest du hinzufügen?</label>
+  <select id="type">
+    <option value="author">Verfasser*in (erscheint als „~Verfasser*in: Name“)</option>
+    <option value="username">Online-Username (für Likes und Kommentare)</option>
+    <option value="intro">Header (Zeile über einem Beitrag)</option>
+    <option value="comment">Zufalls-Kommentar (für beliebige Beiträge)</option>
+  </select>
+  <label for="entry">Dein Eintrag</label>
+  <input id="entry" type="text" autocomplete="off">
+  <div class="row"><span id="entryHint"></span><span id="entryCount"></span></div>
+  <button class="go" id="entryBtn" disabled>Hinzufügen</button>
+  <div class="msg" id="entryMsg" role="status"></div>
+
+  <h2>Kommentar zu einem Beitrag</h2>
+  <p>Such dir einen Beitrag aus und schreib etwas dazu. Dein Kommentar erscheint immer fett, wenn dieser Beitrag auf dem Bildschirm läuft.</p>
+  <label for="search">Beitrag suchen</label>
+  <input id="search" type="search" placeholder="Suchbegriff eingeben" autocomplete="off">
+  <div id="posts" role="group" aria-label="Beiträge"></div>
+  <div id="chosen"></div>
+  <label for="cmt">Dein Kommentar</label>
+  <textarea id="cmt" maxlength="100" aria-label="Dein Kommentar"></textarea>
+  <div class="row"><span>Max. 100 Zeichen</span><span id="cmtCount">0 / 100</span></div>
+  <button class="go" id="cmtBtn" disabled>Kommentar abschicken</button>
+  <div class="msg" id="cmtMsg" role="status"></div>
+
+  <nav aria-label="Weitere Seiten"><a href="/">Eingabe</a><a href="/show">Diashow</a><a href="/admin">Moderation</a></nav>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  const TYPES = {
+    author:   { max: 40,  hint: 'z. B. Gandhi, tagesschau, Gandalf' },
+    username: { max: 30,  hint: 'z. B. flyingbird33' },
+    intro:    { max: 100, hint: 'z. B. Man munkelt:' },
+    comment:  { max: 100, hint: 'z. B. Fake News' }
+  };
+  const len = s => [...s].length;
+
+  /* ---------- Eintrag hinzufügen ---------- */
+  const type = $('type'), entry = $('entry'), entryBtn = $('entryBtn'), entryMsg = $('entryMsg');
+  function updEntry() {
+    const t = TYPES[type.value];
+    entry.maxLength = t.max;
+    $('entryHint').textContent = t.hint;
+    $('entryCount').textContent = len(entry.value) + ' / ' + t.max;
+    entryBtn.disabled = !entry.value.trim();
+  }
+  type.addEventListener('change', updEntry);
+  entry.addEventListener('input', updEntry);
+  async function send(url, body, msgEl) {
+    msgEl.className = 'msg'; msgEl.textContent = '';
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Das hat nicht geklappt.');
+      return true;
+    } catch (e) { msgEl.className = 'msg err'; msgEl.textContent = e.message; return false; }
+  }
+  entryBtn.addEventListener('click', async () => {
+    entryBtn.disabled = true;
+    if (await send('/api/entries', { type: type.value, text: entry.value }, entryMsg)) {
+      entry.value = ''; entryMsg.textContent = 'Ist drin! Du kannst gleich noch einen hinzufügen.';
+    }
+    updEntry();
+  });
+  updEntry();
+
+  /* ---------- Kommentar zu einem Beitrag ---------- */
+  const search = $('search'), box = $('posts'), cmt = $('cmt'), cmtBtn = $('cmtBtn'), cmtMsg = $('cmtMsg');
+  let posts = [], selected = null;
+  function updCmt() {
+    $('cmtCount').textContent = len(cmt.value) + ' / 100';
+    cmtBtn.disabled = !(selected && cmt.value.trim());
+  }
+  function renderPosts() {
+    const q = search.value.trim().toLowerCase();
+    const shown = posts.filter(p => !q || p.text.toLowerCase().includes(q)).slice().reverse();
+    box.textContent = '';
+    if (!shown.length) {
+      const e = document.createElement('div'); e.className = 'empty';
+      e.textContent = posts.length ? 'Keine Treffer.' : 'Noch keine Beiträge.';
+      box.append(e); return;
+    }
+    for (const p of shown) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'post';
+      b.textContent = len(p.text) > 120 ? [...p.text].slice(0, 120).join('') + '…' : p.text;
+      b.setAttribute('aria-pressed', String(selected === p.id));
+      b.onclick = () => {
+        selected = p.id;
+        $('chosen').textContent = 'Ausgewählt: ' + b.textContent;
+        renderPosts(); updCmt();
+      };
+      box.append(b);
+    }
+  }
+  async function loadPosts() {
+    try {
+      const s = await (await fetch('/api/state', { cache: 'no-store' })).json();
+      posts = s.posts || [];
+      if (selected && !posts.some(p => p.id === selected)) { selected = null; $('chosen').textContent = ''; }
+      renderPosts(); updCmt();
+    } catch {}
+  }
+  search.addEventListener('input', renderPosts);
+  cmt.addEventListener('input', updCmt);
+  cmtBtn.addEventListener('click', async () => {
+    cmtBtn.disabled = true;
+    if (await send('/api/posts/' + selected + '/comments', { text: cmt.value }, cmtMsg)) {
+      cmt.value = ''; cmtMsg.textContent = 'Dein Kommentar ist dran!';
+    }
+    updCmt();
+  });
+  loadPosts(); setInterval(loadPosts, 15000);
+</script>
+</body>
+</html>

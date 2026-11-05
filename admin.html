@@ -6,16 +6,18 @@
 <title>Partypost – Moderation</title>
 <style>
   body { font-family:system-ui,sans-serif; max-width:46rem; margin:2rem auto; padding:0 1rem 4rem; line-height:1.45; }
-  nav { display:flex; gap:1.2rem; font-size:.9rem; margin-bottom:1rem; }
+  nav { display:flex; gap:1.2rem; font-size:.9rem; margin-bottom:1rem; flex-wrap:wrap; }
   h2 { margin:2.2rem 0 .5rem; font-size:1.2rem; border-bottom:2px solid #ddd; padding-bottom:.3rem; }
   .hint { color:#555; font-size:.92rem; margin:.2rem 0 .8rem; }
   ul { list-style:none; padding:0; }
   li { display:flex; flex-wrap:wrap; gap:.6rem 1rem; justify-content:space-between; align-items:center; padding:.7rem 0; border-bottom:1px solid #ddd; }
   li .txt { flex:1 1 18rem; overflow-wrap:anywhere; }
+  .gc { flex:1 1 100%; margin:0; padding:0 0 0 1rem; font-size:.92rem; color:#333; }
+  .gc div { display:flex; justify-content:space-between; gap:1rem; align-items:center; padding:.15rem 0; }
   .btns { display:flex; gap:.5rem; flex-wrap:wrap; }
   button { padding:.4rem .8rem; cursor:pointer; }
   textarea { width:100%; font:inherit; padding:.5rem; }
-  textarea.list { height:14rem; }
+  textarea.list { height:12rem; }
   .edit { flex:1 1 100%; }
   .edit textarea { height:6rem; }
   .meta { display:flex; justify-content:space-between; align-items:center; margin-top:.4rem; gap:.5rem; }
@@ -27,7 +29,7 @@
 </style>
 </head>
 <body>
-<nav aria-label="Weitere Seiten"><a href="/">Eingabe</a><a href="/show">Diashow</a></nav>
+<nav aria-label="Weitere Seiten"><a href="/">Eingabe</a><a href="/extras">Extras</a><a href="/show">Diashow</a></nav>
 <h1>Moderation</h1>
 <div id="keybox" hidden>
   <label>Admin-Schlüssel <input id="k" type="password" autocomplete="off"></label>
@@ -38,35 +40,23 @@
 <h2>Anzeige</h2>
 <div class="opts">
   <label><input type="checkbox" id="s_ticker"> Breaking-News-Balken anzeigen (in allen Modi)</label>
-  <label><input type="checkbox" id="s_intros"> Zufällige Intro-Zeilen über den Beiträgen</label>
+  <label><input type="checkbox" id="s_intros"> Zufällige Header über den Beiträgen</label>
   <label><input type="checkbox" id="s_authors"> Zufällige Verfasser*innen unter den Beiträgen</label>
+  <label><input type="checkbox" id="s_reactions"> Zufällige Likes und Kommentare (Gästekommentare erscheinen immer)</label>
   <label><input type="checkbox" id="s_auto"> Automatisch zwischen Modern und Stummfilm wechseln, alle
     <input type="number" id="s_min" min="1" max="60" style="width:4.5rem"> Minuten</label>
 </div>
 <p class="hint">Änderungen gelten sofort und erscheinen innerhalb weniger Sekunden auf dem Bildschirm.</p>
 
 <h2>Beiträge</h2>
+<p class="hint">Unter einem Beitrag stehen die Kommentare der Gäste, die du hier einzeln löschen kannst.</p>
 <ul id="l"></ul>
 
-<h2>Intro-Zeilen</h2>
-<p class="hint">Eine Zeile pro Eintrag. Sie werden zufällig über die Beiträge gesetzt.</p>
-<textarea id="intros" class="list" aria-label="Intro-Zeilen"></textarea>
-<div class="btns" style="margin-top:.5rem">
-  <button id="introsSave" type="button">Speichern</button>
-  <button id="introsReset" type="button">Auf Standard zurücksetzen</button>
-</div>
-
-<h2>Verfasser*innen</h2>
-<p class="hint">Eine Zeile pro Name. Angezeigt als „~Verfasser*in: Name“.</p>
-<textarea id="authors" class="list" aria-label="Verfasser*innen"></textarea>
-<div class="btns" style="margin-top:.5rem">
-  <button id="authorsSave" type="button">Speichern</button>
-  <button id="authorsReset" type="button">Auf Standard zurücksetzen</button>
-</div>
+<div id="lists"></div>
 
 <h2>Dauerhaft sichern</h2>
-<p class="hint">Im kostenlosen Render-Tarif gehen Beiträge, Listen und Einstellungen bei einem Neustart oder neuen Deploy verloren.
-  Das Backup enthält alles. Wenn du die Datei als <code>seed.json</code> in dein GitHub-Repo legst (neben <code>server.js</code>),
+<p class="hint">Im kostenlosen Render-Tarif gehen Beiträge, Gästekommentare, alle Listen und Einstellungen bei einem Neustart oder neuen Deploy verloren.
+  Das Backup enthält alles davon. Wenn du die Datei als <code>seed.json</code> in dein GitHub-Repo legst (neben <code>server.js</code>),
   startet der Server künftig immer mit diesem Stand.</p>
 <div class="btns">
   <button id="dl" type="button">Backup herunterladen</button>
@@ -80,7 +70,14 @@
   let key = new URLSearchParams(location.search).get('key') || '';
   try { key = key || sessionStorage.getItem('pp_key') || ''; } catch {}
   keybox.hidden = !!key;
-  let editing = false, cur = { settings: {}, intros: [], authors: [] };
+  let editing = false, cur = { settings: {} };
+
+  const LISTS = [
+    { key: 'intros',      title: 'Header',                  hint: 'Zeilen, die zufällig über einem Beitrag stehen. Eine Zeile pro Eintrag.' },
+    { key: 'authors',     title: 'Verfasser*innen',         hint: 'Angezeigt als „~Verfasser*in: Name“. Eine Zeile pro Name. Auch Teil des Namenspools für Likes und Kommentare.' },
+    { key: 'usernames',   title: 'Online-Usernamen',        hint: 'Zweiter Namenspool für Likes und Kommentare. Eine Zeile pro Name.' },
+    { key: 'commentPool', title: 'Zufalls-Kommentare',      hint: 'Kurze Kommentare, die zufällig unter Beiträgen erscheinen. Eine Zeile pro Kommentar.' }
+  ];
 
   function setStatus(msg, ok) { status.textContent = msg || ''; status.className = msg ? (ok ? 'ok' : 'err') : ''; }
   function needKey(msg) { key = ''; keybox.hidden = false; setStatus(msg); try { sessionStorage.removeItem('pp_key'); } catch {} }
@@ -105,28 +102,38 @@
   function fillSettings() {
     const s = cur.settings;
     $('s_ticker').checked = !!s.ticker; $('s_intros').checked = !!s.intros; $('s_authors').checked = !!s.authors;
-    $('s_auto').checked = !!s.autoSwitch; $('s_min').value = s.switchMinutes || 3;
+    $('s_reactions').checked = !!s.reactions; $('s_auto').checked = !!s.autoSwitch; $('s_min').value = s.switchMinutes || 3;
   }
   async function saveSettings() {
     const body = { ticker: $('s_ticker').checked, intros: $('s_intros').checked, authors: $('s_authors').checked,
-                   autoSwitch: $('s_auto').checked, switchMinutes: Number($('s_min').value) || 3 };
+                   reactions: $('s_reactions').checked, autoSwitch: $('s_auto').checked, switchMinutes: Number($('s_min').value) || 3 };
     const r = await call('PUT', '/api/settings', body);
     if (r) { cur.settings = (await r.json()).settings; setStatus('Gespeichert.', true); }
     fillSettings();
   }
-  ['s_ticker', 's_intros', 's_authors', 's_auto', 's_min'].forEach(id => $(id).addEventListener('change', saveSettings));
+  ['s_ticker', 's_intros', 's_authors', 's_reactions', 's_auto', 's_min'].forEach(id => $(id).addEventListener('change', saveSettings));
 
-  /* ---------- Listen ---------- */
-  function fillLists() { $('intros').value = cur.intros.join('\n'); $('authors').value = cur.authors.join('\n'); }
+  /* ---------- Textlisten ---------- */
+  function buildLists() {
+    const box = $('lists');
+    for (const L of LISTS) {
+      const h = document.createElement('h2'); h.textContent = L.title;
+      const p = document.createElement('p'); p.className = 'hint'; p.textContent = L.hint;
+      const ta = document.createElement('textarea'); ta.className = 'list'; ta.id = 'list_' + L.key; ta.setAttribute('aria-label', L.title);
+      const btns = document.createElement('div'); btns.className = 'btns'; btns.style.marginTop = '.5rem';
+      const save = document.createElement('button'); save.type = 'button'; save.textContent = 'Speichern';
+      const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = 'Auf Standard zurücksetzen';
+      save.onclick = () => saveList(L.key, ta.value.split('\n'));
+      reset.onclick = () => { if (confirm(L.title + ' auf die Standardliste zurücksetzen? Eigene Änderungen und Gäste-Einträge gehen verloren.')) saveList(L.key, null); };
+      btns.append(save, reset);
+      box.append(h, p, ta, btns);
+    }
+  }
+  function fillLists() { for (const L of LISTS) $('list_' + L.key).value = (cur[L.key] || []).join('\n'); }
   async function saveList(name, value) {
     const r = await call('PUT', '/api/lists', { [name]: value });
-    if (r) { const d = await r.json(); cur.intros = d.intros; cur.authors = d.authors; fillLists(); setStatus('Gespeichert.', true); }
+    if (r) { const d = await r.json(); for (const L of LISTS) cur[L.key] = d[L.key]; fillLists(); setStatus('Gespeichert.', true); }
   }
-  const lines = id => $(id).value.split('\n');
-  $('introsSave').onclick = () => saveList('intros', lines('intros'));
-  $('authorsSave').onclick = () => saveList('authors', lines('authors'));
-  $('introsReset').onclick = () => { if (confirm('Intro-Zeilen auf die Standardliste zurücksetzen? Eigene Änderungen gehen verloren.')) saveList('intros', null); };
-  $('authorsReset').onclick = () => { if (confirm('Verfasser*innen auf die Standardliste zurücksetzen? Eigene Änderungen gehen verloren.')) saveList('authors', null); };
 
   /* ---------- Beiträge ---------- */
   function startEdit(li, p) {
@@ -156,7 +163,19 @@
       const e = document.createElement('button'); e.textContent = 'Bearbeiten'; e.onclick = () => startEdit(li, p);
       const d = document.createElement('button'); d.textContent = 'Löschen';
       d.onclick = async () => { if (await call('DELETE', '/api/posts/' + p.id)) loadPosts(); };
-      btns.append(e, d); li.append(s, btns); l.append(li);
+      btns.append(e, d); li.append(s, btns);
+      if ((p.comments || []).length) {
+        const gc = document.createElement('div'); gc.className = 'gc';
+        for (const c of p.comments) {
+          const row = document.createElement('div');
+          const t = document.createElement('span'); t.textContent = 'Partygast: ' + c.text;
+          const x = document.createElement('button'); x.textContent = 'Kommentar löschen';
+          x.onclick = async () => { if (await call('DELETE', '/api/posts/' + p.id + '/comments/' + c.id)) loadPosts(); };
+          row.append(t, x); gc.append(row);
+        }
+        li.append(gc);
+      }
+      l.append(li);
     }
   }
   async function fetchState() { return (await fetch('/api/state', { cache: 'no-store' })).json(); }
@@ -167,7 +186,8 @@
   async function loadAll() {
     try {
       const s = await fetchState();
-      cur = { settings: s.settings, intros: s.intros, authors: s.authors };
+      cur = { settings: s.settings };
+      for (const L of LISTS) cur[L.key] = s[L.key];
       fillSettings(); fillLists(); renderPosts(s.posts);
     } catch { setStatus('Der Server antwortet nicht.'); }
   }
@@ -189,12 +209,12 @@
     if (!f) { setStatus('Bitte zuerst eine Backup-Datei wählen.'); return; }
     let data;
     try { data = JSON.parse(await f.text()); } catch { setStatus('Die Datei ist kein gültiges JSON.'); return; }
-    if (!confirm('Backup einspielen? Alle aktuellen Beiträge, Listen und Einstellungen werden ersetzt.')) return;
+    if (!confirm('Backup einspielen? Alle aktuellen Beiträge, Kommentare, Listen und Einstellungen werden ersetzt.')) return;
     const r = await call('POST', '/api/restore', data);
     if (r) { const d = await r.json(); setStatus('Backup eingespielt (' + d.posts + ' Beiträge).', true); loadAll(); }
   };
 
-  loadAll(); setInterval(loadPosts, 5000);
+  buildLists(); loadAll(); setInterval(loadPosts, 5000);
 </script>
 </body>
 </html>
