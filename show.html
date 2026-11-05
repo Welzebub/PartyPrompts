@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet">
 <style>
-  :root { --tickh: 0px; --qpad: 2vmin; }
+  :root { --tickh: 0px; --qpad: 2vmin; --xh: 28vmin; --qw: calc(max(14vmin,84px) + 2.4vmin); }
   html, body { margin:0; height:100%; overflow:hidden; }
   body { font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif; color:#fff6e0; background:#2b1055;
     transition: background-color 1.2s ease; }
@@ -16,7 +16,7 @@
   body.silent { --qpad: 6.5vmin; }
 
   #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    padding:8vmin 8vmin calc(7vmin + var(--tickh)); }
+    padding:8vmin 8vmin calc(7vmin + var(--tickh) + var(--xh)); }
   #card { display:flex; flex-direction:column; align-items:center; max-width:90vw; text-align:center; overflow-wrap:anywhere;
     opacity:0; transition:opacity .9s ease; position:relative; z-index:2; }
   #card.on { opacity:1; }
@@ -27,16 +27,18 @@
   #text { font-weight:800; line-height:1.15; }
   #author { text-align:right; font-style:italic; font-weight:400; opacity:.8; font-size:max(.33em,2.2vmin); margin-top:1.8em; }
   #intro:empty, #author:empty, #likes:empty { display:none; }
-  /* Links die Likes, rechts eine eigene Spalte mit Kommentaren */
-  #extras { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:1.4em 3em;
-    width:100%; max-width:min(90vw,60em); min-width:min(90vw,34em); font-size:max(.28em,1.9vmin); margin-top:1.6em; text-align:left; }
+  /* Likes und Kommentare: fester Streifen unten, rechts neben dem QR-Code.
+     Die Position hängt nicht von der Länge des Beitrags ab. */
+  #extras { position:fixed; left:calc(var(--qpad) + var(--qw) + 4vmin); right:var(--qpad); bottom:calc(var(--tickh) + var(--qpad));
+    height:var(--xh); display:flex; align-items:flex-start; justify-content:flex-start; gap:1.8em;
+    font-size:max(2vmin,12px); text-align:left; z-index:5; }
   #extras[hidden], #cwrap[hidden] { display:none; }
-  #likes { flex:0 0 auto; opacity:.6; line-height:1.35; }
-  #likes .big { font-size:1.25em; }
+  #likes { flex:0 0 12em; opacity:.6; line-height:1.35; overflow-wrap:anywhere; }
+  #likes .big { font-size:1.25em; margin-bottom:.3em; }
   #likes .heart { color:#ff6b81; }
-  #likes .gef { margin-top:.5em; opacity:.85; }
+  #likes .gef { font-size:.8em; opacity:.85; margin-left:.1em; }
   #likes .nm { display:block; }
-  #cwrap { flex:0 1 26em; min-width:0; margin-left:auto; }
+  #cwrap { flex:0 1 40em; min-width:0; }
   #chead { font-size:.8em; font-weight:700; letter-spacing:.12em; opacity:.4; }
   .c { margin-top:.7em; line-height:1.25; opacity:.55; }
   .c .n { display:block; font-weight:700; font-size:.85em; opacity:.85; }
@@ -71,7 +73,7 @@
   /* Stummfilm-Modus */
   #frame, #grain, #vignette { display:none; position:absolute; pointer-events:none; }
   body.silent { background:#000; color:#fff; }
-  body.silent #stage { padding:11vmin 11vmin calc(11vmin + var(--tickh)); animation: flicker 4.3s steps(1) infinite; }
+  body.silent #stage { padding:11vmin 11vmin calc(11vmin + var(--tickh) + var(--xh)); animation: flicker 4.3s steps(1) infinite; }
   body.silent #card { font-family:"Cinzel Decorative","Cinzel","Palatino Linotype",Georgia,serif; letter-spacing:.03em; }
   body.silent #text { font-weight:700; line-height:1.35; }
   body.silent #intro { color:#fff; font-size:max(.48em,2.6vmin); opacity:.9; }
@@ -285,14 +287,14 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       const names = [];
       for (let i = 0; i < Math.min(3, n); i++) { const nm = nameFrom(used); if (nm) names.push(nm); }
       if (names.length) {
-        const g = document.createElement('div'); g.className = 'gef'; g.textContent = 'gef\u00e4llt:';
-        likesEl.append(g);
+        const g = document.createElement('span'); g.className = 'gef'; g.textContent = 'gef\u00e4llt:';
+        top.append(' ', g);
         for (const nm of names) { const d = document.createElement('div'); d.className = 'nm'; d.textContent = nm; likesEl.append(d); }
       }
       chars += names.join(', ').length + 10;
     }
     // Gästekommentare zuerst und hervorgehoben (die letzten drei), dann Zufallskommentare im Restbudget
-    const budget = textLen <= 90 ? 6 : textLen <= 160 ? 5 : 4;
+    const budget = 4;   // höchstens vier Kommentarblöcke, Gästekommentare haben Vorrang
     const mine = (p.comments || []).slice(-3);
     for (const c of mine) { addComment('Partygast', c.text, true); chars += c.text.length; }
     if (settings.reactions && poolComments.length) {
@@ -310,6 +312,20 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     cwrapEl.hidden = !commentsEl.children.length;
     extrasEl.hidden = !likesEl.children.length && !commentsEl.children.length;
     return chars;
+  }
+
+  // Passt die Kommentarspalte nicht in den festen Streifen, fallen Zufallskommentare von hinten weg
+  function fitExtras() {
+    if (extrasEl.hidden) return;
+    const max = extrasEl.clientHeight;
+    if (!max) return;
+    while (cwrapEl.offsetHeight > max) {
+      const r = commentsEl.querySelectorAll('.c:not(.u)');
+      if (!r.length) break;
+      r[r.length - 1].remove();
+    }
+    cwrapEl.hidden = !commentsEl.children.length;
+    extrasEl.hidden = !likesEl.children.length && !commentsEl.children.length;
   }
 
   function next() {
@@ -348,6 +364,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
       textEl.textContent = p.text;
       authorEl.textContent = author ? '~Verfasser*in: ' + author : '';
       const extraChars = renderExtras(p, [...p.text].length);
+      fitExtras();
       paint(p);
       card.classList.add('on');
       await sleep(Math.min(20000, 6000 + (p.text.length + intro.length) * 60 + extraChars * 25));
