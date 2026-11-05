@@ -27,9 +27,17 @@
   #text { font-weight:800; line-height:1.15; }
   #author { text-align:right; font-style:italic; font-weight:400; opacity:.8; font-size:max(.33em,2.2vmin); margin-top:1.8em; }
   #intro:empty, #author:empty, #likes:empty { display:none; }
-  #extras { max-width:min(90vw,42em); font-size:max(.28em,1.9vmin); margin-top:1.6em; }
-  #likes { opacity:.6; }
+  /* Links die Likes, rechts eine eigene Spalte mit Kommentaren */
+  #extras { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:1.4em 3em;
+    width:100%; max-width:min(90vw,60em); min-width:min(90vw,34em); font-size:max(.28em,1.9vmin); margin-top:1.6em; text-align:left; }
+  #extras[hidden], #cwrap[hidden] { display:none; }
+  #likes { flex:0 0 auto; opacity:.6; line-height:1.35; }
+  #likes .big { font-size:1.25em; }
   #likes .heart { color:#ff6b81; }
+  #likes .gef { margin-top:.5em; opacity:.85; }
+  #likes .nm { display:block; }
+  #cwrap { flex:0 1 26em; min-width:0; margin-left:auto; }
+  #chead { font-size:.8em; font-weight:700; letter-spacing:.12em; opacity:.4; }
   .c { margin-top:.7em; line-height:1.25; opacity:.55; }
   .c .n { display:block; font-weight:700; font-size:.85em; opacity:.85; }
   .c .t { display:block; }
@@ -85,7 +93,10 @@
 <body>
 <div id="stage"><div id="card">
   <div id="main"><p id="intro"></p><p id="text"></p><p id="author"></p></div>
-  <div id="extras" hidden><p id="likes"></p><div id="comments"></div></div>
+  <div id="extras" hidden>
+    <div id="likes"></div>
+    <div id="cwrap" hidden><div id="chead">Kommentare</div><div id="comments"></div></div>
+  </div>
 </div></div>
 <div id="frame"></div><div id="vignette"></div><div id="grain"></div>
 <div id="hint"></div>
@@ -107,7 +118,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const COLORS = ['#2b1055','#7a1f5c','#0b5563','#a33b20','#1f4d2b','#3a2a8c'];
   const card = $('card'), introEl = $('intro'), textEl = $('text'), authorEl = $('author'),
-        extrasEl = $('extras'), likesEl = $('likes'), commentsEl = $('comments'),
+        extrasEl = $('extras'), likesEl = $('likes'), cwrapEl = $('cwrap'), commentsEl = $('comments'),
         track = $('ttrack'), tview = $('tview'), modeBtn = $('mode');
   $('hint').textContent = 'Mitmachen: ' + location.host;
 
@@ -259,7 +270,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     const t = document.createElement('span'); t.className = 't'; t.textContent = text;
     d.append(n, t); commentsEl.append(d);
   }
-  function clearExtras() { likesEl.textContent = ''; commentsEl.textContent = ''; extrasEl.hidden = true; }
+  function clearExtras() { likesEl.textContent = ''; commentsEl.textContent = ''; cwrapEl.hidden = true; extrasEl.hidden = true; }
   // Gibt die Zeichenzahl der Extras zurück (verlängert die Anzeigedauer etwas)
   function renderExtras(p, textLen) {
     clearExtras();
@@ -267,11 +278,17 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
     const used = new Set();
     if (settings.reactions) {
       const n = likeCount();
+      const top = document.createElement('div'); top.className = 'big';
       const h = document.createElement('span'); h.className = 'heart'; h.textContent = '\u2665';
-      likesEl.append(h, ' ' + n.toLocaleString('de-DE'));
+      top.append(h, ' ' + n.toLocaleString('de-DE'));
+      likesEl.append(top);
       const names = [];
       for (let i = 0; i < Math.min(3, n); i++) { const nm = nameFrom(used); if (nm) names.push(nm); }
-      if (names.length) likesEl.append(' \u00b7 gef\u00e4llt: ' + names.join(', '));
+      if (names.length) {
+        const g = document.createElement('div'); g.className = 'gef'; g.textContent = 'gef\u00e4llt:';
+        likesEl.append(g);
+        for (const nm of names) { const d = document.createElement('div'); d.className = 'nm'; d.textContent = nm; likesEl.append(d); }
+      }
       chars += names.join(', ').length + 10;
     }
     // Gästekommentare zuerst und hervorgehoben (die letzten drei), dann Zufallskommentare im Restbudget
@@ -290,7 +307,8 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
         chars += t.length;
       }
     }
-    extrasEl.hidden = !likesEl.textContent && !commentsEl.children.length;
+    cwrapEl.hidden = !commentsEl.children.length;
+    extrasEl.hidden = !likesEl.children.length && !commentsEl.children.length;
     return chars;
   }
 

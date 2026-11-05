@@ -63,6 +63,13 @@
   <input id="up" type="file" accept="application/json,.json" aria-label="Backup-Datei wählen">
   <button id="upb" type="button">Backup einspielen</button>
 </div>
+<div class="opts" style="margin-top:1rem">
+  <label><input type="checkbox" id="auto"> Auto-Backup: alle 30 Minuten automatisch ein Backup auf dieses Gerät herunterladen</label>
+</div>
+<p class="hint" id="autoinfo"></p>
+<p class="hint">Das Auto-Backup läuft nur, solange diese Seite in einem Browser-Tab geöffnet bleibt. Beim Einschalten wird sofort ein erstes
+  Backup geladen, danach alle 30 Minuten. Die Dateien landen im Download-Ordner, der Dateiname enthält Datum und Uhrzeit.
+  Der Browser fragt eventuell einmal, ob mehrere Downloads erlaubt sind. Bitte erlauben.</p>
 
 <script>
   const $ = id => document.getElementById(id);
@@ -193,17 +200,47 @@
   }
 
   /* ---------- Backup ---------- */
-  $('dl').onclick = async () => {
+  const p2 = n => String(n).padStart(2, '0');
+  function stamp(d = new Date()) {   // lokale Zeit, z. B. 2026-11-05_14-30-00
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + '_' + p2(d.getHours()) + '-' + p2(d.getMinutes()) + '-' + p2(d.getSeconds());
+  }
+  async function downloadBackup() {
     const r = await call('GET', '/api/backup');
-    if (!r) return;
+    if (!r) return false;
     const blob = await r.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'partypost-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.download = 'partypost-backup-' + stamp() + '.json';
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    setStatus('Backup heruntergeladen.', true);
-  };
+    return true;
+  }
+  $('dl').onclick = async () => { if (await downloadBackup()) setStatus('Backup heruntergeladen.', true); };
+
+  /* ---------- Auto-Backup (läuft im Browser dieses Geräts) ---------- */
+  const AUTO_MS = 30 * 60 * 1000;
+  let autoOn = false, nextAt = 0, lastAuto = null;
+  const hhmm = d => p2(d.getHours()) + ':' + p2(d.getMinutes());
+  function autoInfo() {
+    $('autoinfo').textContent = !autoOn ? 'Auto-Backup ist aus.'
+      : (lastAuto ? 'Letztes Auto-Backup: ' + hhmm(lastAuto) + ' Uhr. ' : 'Noch kein Auto-Backup in dieser Sitzung. ') + 'Nächstes um ' + hhmm(new Date(nextAt)) + ' Uhr.';
+  }
+  async function runAuto() {
+    const ok = await downloadBackup();
+    if (ok) lastAuto = new Date();
+    nextAt = Date.now() + (ok ? AUTO_MS : 60000);   // bei Fehler (z. B. fehlender Schlüssel) in einer Minute erneut
+    if (!ok && !status.textContent) setStatus('Auto-Backup fehlgeschlagen, neuer Versuch in einer Minute.');
+    autoInfo();
+  }
+  $('auto').addEventListener('change', async () => {
+    autoOn = $('auto').checked;
+    try { localStorage.setItem('pp_autobackup', autoOn ? '1' : '0'); } catch {}
+    if (autoOn) await runAuto(); else autoInfo();
+  });
+  setInterval(() => { if (autoOn && Date.now() >= nextAt) runAuto(); }, 20000);   // Zeitvergleich statt langem Timer: robust bei Ruhemodus
+  try { autoOn = localStorage.getItem('pp_autobackup') === '1'; } catch {}
+  if (autoOn) { $('auto').checked = true; nextAt = Date.now() + AUTO_MS; }
+  autoInfo();
   $('upb').onclick = async () => {
     const f = $('up').files[0];
     if (!f) { setStatus('Bitte zuerst eine Backup-Datei wählen.'); return; }
