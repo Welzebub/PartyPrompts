@@ -17,19 +17,19 @@
 
   #stage { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     padding:8vmin 8vmin calc(7vmin + var(--tickh) + var(--xh)); }
-  #card { display:flex; flex-direction:column; align-items:center; max-width:90vw; text-align:center; overflow-wrap:anywhere;
+  #card { display:flex; flex-direction:column; align-items:center; max-width:min(90vw, calc(100vw - 2 * (var(--qpad) + var(--qw) + 3vmin))); text-align:center; overflow-wrap:anywhere;
     opacity:0; transition:opacity .9s ease; position:relative; z-index:2; }
   #card.on { opacity:1; }
   #card p { margin:0; }
-  #main { max-width:90vw; }
+  #main { max-width:100%; }
   /* Rangfolge: 1. eigener Text, 2. Header, 3. Verfasser*in, 4. Likes und Kommentare */
   #intro { color:#ffb703; font-weight:700; font-size:max(.5em,2.8vmin); letter-spacing:.02em; margin-bottom:1.1em; line-height:1.25; }
   #text { font-weight:800; line-height:1.15; }
   #author { text-align:right; font-style:italic; font-weight:400; opacity:.8; font-size:max(.33em,2.2vmin); margin-top:1.8em; }
   #intro:empty, #author:empty, #likes:empty { display:none; }
-  /* Likes und Kommentare: fester Streifen unten, rechts neben dem QR-Code.
+  /* Likes und Kommentare: fester Streifen unten links.
      Die Position hängt nicht von der Länge des Beitrags ab. */
-  #extras { position:fixed; left:calc(var(--qpad) + var(--qw) + 4vmin); right:var(--qpad); bottom:calc(var(--tickh) + var(--qpad));
+  #extras { position:fixed; left:var(--qpad); right:var(--qpad); bottom:calc(var(--tickh) + var(--qpad));
     height:var(--xh); display:flex; align-items:flex-start; justify-content:flex-start; gap:1.8em;
     font-size:max(2vmin,12px); text-align:left; z-index:5; }
   #extras[hidden], #cwrap[hidden] { display:none; }
@@ -46,14 +46,14 @@
   .c.u { opacity:.95; font-size:1.15em; font-weight:700; }
 
   #hint { position:fixed; left:2vmin; top:1vmin; font-size:max(2vmin,12px); opacity:.7; z-index:5; }
-  #nav { position:fixed; right:2vmin; top:1vmin; display:flex; gap:1.6vmin; align-items:center; z-index:5;
+  #nav { position:fixed; right:calc(var(--qpad) + var(--qw) + 2vmin); top:1vmin; display:flex; gap:1.6vmin; align-items:center; z-index:5;
     font-size:max(2vmin,12px); background:rgba(0,0,0,.5); padding:.5vmin 1.6vmin; border-radius:2vmin;
     transition:opacity .6s ease; }
   #nav a, #nav button { color:inherit; font:inherit; background:none; border:0; padding:0; cursor:pointer; text-decoration:underline; }
   body:not(.active) #nav:not(:focus-within) { opacity:0; }
 
   /* QR-Code (immer sichtbar) */
-  #qr { position:fixed; left:var(--qpad); bottom:calc(var(--tickh) + var(--qpad)); z-index:6;
+  #qr { position:fixed; right:var(--qpad); top:var(--qpad); z-index:6;
     display:flex; flex-direction:column; align-items:center; gap:.6vmin; }
   #qrbox { width:max(14vmin,84px); background:#fff; padding:1.2vmin; border-radius:1vmin; }
   #qrbox svg { display:block; width:100%; height:auto; }
